@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Optimized Map with Mapbox</title>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.js"></script>
+    <style>
+        #map { height: 80vh; width: 100%; }
+        #filterPanel, #searchPanel {
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            margin: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            flex-wrap: wrap;
+        }
+        .filter-option {
+            margin-right: 15px;
+            margin-bottom: 5px;
+        }
+        #searchInput1, #searchInput2 {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        #searchResults1, #searchResults2 {
+            width: 100%;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            background-color: #fff;
+            max-height: 150px;
+            overflow-y: auto;
+            display: none;
+        }
+        .result-item {
+            padding: 8px;
+            cursor: pointer;
+        }
+        .result-item:hover {
+            background-color: #f1f1f1;
+        }
+        #popupContainer {
+            position: absolute;
+            z-index: 1000; /* Ensure it's on top of the map */
+            top: 10px; /* Adjust top position as needed */
+            left: 10px; /* Adjust left position as needed */
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Optional shadow */
+            display: none; /* Hide it initially */
+            max-height: 400px; /* Set a maximum height for the popup */
+            overflow-y: auto; /* Enable vertical scrolling */
+        }
+        #popupCloseButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div id="searchPanel">
+    <input type="text" id="searchInput1" placeholder="Поиск по QEWI Name" onkeyup="searchData(1)">
+    <div id="searchResults1"></div>
+    <input type="text" id="searchInput2" placeholder="Поиск по QEWI Business Name" onkeyup="searchData(2)">
+    <div id="searchResults2"></div>
+</div>
+
+<div id="filterPanel">
+    <label class="filter-option">
+        <input type="checkbox" id="SAFEFilter" value="SAFE" onchange="updateMarkers()"> SAFE
+    </label>
+    <label class="filter-option">
+        <input type="checkbox" id="SWARMPFilter" value="SWARMP" onchange="updateMarkers()"> SWARMP
+    </label>
+    <label class="filter-option">
+        <input type="checkbox" id="SWARMPExpiredFilter" value="SWARMP (EXPIRED)" onchange="updateMarkers()"> SWARMP (EXPIRED)
+    </label>
+    <label class="filter-option">
+        <input type="checkbox" id="NoReportFilter" value="No Report Filed" onchange="updateMarkers()"> No Report Filed
+    </label>
+    <label class="filter-option">
+        <input type="checkbox" id="UNSAFEFilter" value="UNSAFE" onchange="updateMarkers()"> UNSAFE
+    </label>
+    <label class="filter-option">
+        <input type="checkbox" id="EmptyFilter" value="Empty" onchange="updateMarkers()"> Empty
+    </label>
+    <label class="filter-option">
+        <input type="checkbox" id="EstimateDateFilter" value="Estimate Date" onchange="updateMarkers()"> Estimate Date
+    </label>
+    <label class="filter-option">
+        <input type="checkbox" id="JobDateFilter" value="Job Date" onchange="updateMarkers()"> Job Date
+    </label>
+</div>
+
+<div id="map"></div>
+<div id="popupContainer"></div> 
+
+<script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoibGlubmlrYWdlbmN5IiwiYSI6ImNtMzRtZWlnYzAxNmUyanF4ZmxxZnJnc24ifQ.PyWdx3E09PfzIcF_SQyvWA';
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/streets-v11',
+        center: [-74.0060, 40.7128],
+        zoom: 12
+    });
+
+    let markers = [];
+    let allLocations = [];
+    let groupedLocations = {};
+    let searchResults1 = document.getElementById('searchResults1');
+    let searchResults2 = document.getElementById('searchResults2');
+    const offset = 0.0001;
+    const positionCounts = {};
+    let currentQuery1 = '';
+    let currentQuery2 = '';
+
+    map.on('load', () => {
+        map.addSource('places', {
+            type: 'geojson',
+            data: 'Final.json', // Ваш файл JSON в формате GeoJSON
+            cluster: false,
+            clusterMaxZoom: 14,
+            clusterRadius: 50
+        });
+
+        // Слой для маркеров
+        map.addLayer({
+            id: 'places-layer',
+            type: 'circle',
+            source: 'places',
+            paint: {
+                'circle-color': [
+                    'match',
+                    ['get', 'Current Filing Status'],
+                    'SAFE', '#28a745', // Зеленый
+                    'SWARMP', '#ffc107', // Желтый
+                    'SWARMP (EXPIRED)', '#0000ff', // синий
+                    'No Report Filed', '#6c757d', // Серый
+                    'UNSAFE', '#ff0000', // Красный
+                    /* Add more colors for other statuses */
+                    '#888888' // Черный (по умолчанию)
+                    
+                ],
+                'circle-radius': 6,
+                'circle-stroke-width': 1,
+                'circle-stroke-color': '#011022'
+            }
+        });
+
+        // Загрузка данных GeoJSON
+        fetch('Final.json') 
+            .then(response => response.json())
+            .then(data => {
+                allLocations = data.features;
+                groupLocations();
+                updateGeoJSONData(data); // Обновляем данные в слое
+            });
+
+        // Клик на маркере для вывода инфо
+        map.on('click', 'places-layer', (e) => {
+            const coordinates = e.features[0].geometry.coordinates.slice();
+            const properties = e.features[0].properties;
+            const infoWindowContent = `
+                <span id="popupCloseButton" onclick="closePopup()">×</span>
+                <h3>${properties.Address}</h3>
+                ${properties['Cycle'] ? `<p><strong>Cycle:</strong> ${properties['Cycle']}</p>` : ''}
+                ${properties['Control Number'] ? `<p><strong>Control Number:</strong> ${properties['Control Number']}</p>` : ''}
+                ${properties['Initial Filing Status'] ? `<p><strong>Initial Filing Status:</strong> ${properties['Initial Filing Status']}</p>` : ''}
+                ${properties['Current Filing Status'] ? `<p><strong>Current Filing Status:</strong> ${properties['Current Filing Status']}</p>` : ''}
+                ${properties['Effective Filing Date'] ? `<p><strong>Effective Filing Date:</strong> ${properties['Effective Filing Date']}</p>` : ''}
+                ${properties['SWARMP Completion Date'] ? `<p><strong>SWARMP Completion Date:</strong> ${properties['SWARMP Completion Date']}</p>` : ''}
+                ${properties['QEWI Name'] ? `<p><strong>QEWI Name:</strong> ${properties['QEWI Name']}</p>` : ''}
+                ${properties['QEWI Name'] ? `<p><strong>QEWI Business Name:</strong> ${properties['QEWI Name']}</p>` : ''}
+                ${properties['QEWI E-mail'] ? `<p><strong>QEWI E-mail:</strong> ${properties['QEWI E-mail']}</p>` : ''}
+                ${properties['QEWI Phone'] ? `<p><strong>QEWI Phone:</strong> ${properties['QEWI Phone']}</p>` : ''}
+                ${properties['QEWI AF ID'] ? `<p><strong>QEWI AF ID:</strong> ${properties['QEWI AF ID']}</p>` : ''}
+                ${properties['Owner Name'] ? `<p><strong>Owner Name:</strong> ${properties['Owner Name']}</p>` : ''}
+                ${properties['Owner Type'] ? `<p><strong>Owner Type:</strong> ${properties['Owner Type']}</p>` : ''}
+                ${properties['Number'] ? `<p><strong>Number:</strong> ${properties['Number']}</p>` : ''}
+                ${properties['Address'] ? `<p><strong>Address:</strong> ${properties['Address']}</p>` : ''}
+                ${properties['Bin'] ? `<p><strong>Bin:</strong> ${properties['Bin']}</p>` : ''}
+                ${properties['Hired By'] ? `<p><strong>Hired By:</strong> ${properties['Hired By']}</p>` : ''}
+                ${properties['Borough'] ? `<p><strong>Borough:</strong> ${properties['Borough']}</p>` : ''}
+                ${properties['Block'] ? `<p><strong>Block:</strong> ${properties['Block']}</p>` : ''}
+                ${properties['Lot'] ? `<p><strong>Lot:</strong> ${properties['Lot']}</p>` : ''}
+                ${properties['Unsafe Completion Date'] ? `<p><strong>Unsafe Completion Date:</strong> ${properties['Unsafe Completion Date']}</p>` : ''}
+                ${properties['Estimate Date'] ? `<p><strong>Estimate Date:</strong> ${properties['Estimate Date']}</p>` : ''}
+                ${properties['Job Date'] ? `<p><strong>Job Date:</strong> ${properties['Job Date']}</p>` : ''}
+                ${properties['GC Who requested estimate'] ? `<p><strong>GC Who requested estimate:</strong> ${properties['GC Who requested estimate']}</p>` : ''}
+                ${properties['How'] ? `<p><strong>How:</strong> ${properties['How']}</p>` : ''}
+                ${properties['Building Management'] ? `<p><strong>Building Management:</strong> ${properties['Building Management']}</p>` : ''}
+                ${properties['BM Name'] ? `<p><strong>BM Name:</strong> ${properties['BM Name']}</p>` : ''}
+                ${properties['BM E-mail'] ? `<p><strong>BM E-mail:</strong> ${properties['BM E-mail']}</p>` : ''}
+                ${properties['BM Phone'] ? `<p><strong>BM Phone:</strong> ${properties['BM Phone']}</p>` : ''}
+                ${properties['BM AF ID'] ? `<p><strong>BM AF ID:</strong> ${properties['BM AF ID']}</p>` : ''}
+                ${properties['Notes'] ? `<p><strong>Notes:</strong> ${properties['Notes']}</p>` : ''}
+            `;
+
+            // Get the popup container element
+            const popupContainer = document.getElementById('popupContainer');
+
+            // Clear any existing popup
+            popupContainer.innerHTML = '';
+
+            // Update the container's content and visibility
+            popupContainer.innerHTML = infoWindowContent;
+            popupContainer.style.display = 'block';
+        });
+    });
+
+    function groupLocations() {
+        allLocations.forEach(location => {
+            const controlNumber = location.properties['Control Number'];
+            if (!groupedLocations[controlNumber]) {
+                groupedLocations[controlNumber] = location.properties;
+            } else {
+                const existingLocation = groupedLocations[controlNumber];
+                for (let key in location.properties) {
+                    if (location.properties[key] && existingLocation[key] && location.properties[key] !== existingLocation[key]) {
+                        existingLocation[key] += `, ${location.properties[key]}`;
+                    } else if (!existingLocation[key]) {
+                        existingLocation[key] = location.properties[key];
+                    }
+                }
+            }
+        });
+    }
+
+    // Функция для обновления данных GeoJSON в слое
+    function updateGeoJSONData(data) {
+        map.getSource('places').setData(data);
+    }
+
+    // Функция для обновления маркеров с учетом фильтров и поиска
+    function updateMarkers() {
+        const selectedStatuses = [];
+        const selectedDates = [];
+        const query1 = document.getElementById('searchInput1').value.toLowerCase().trim();
+        const query2 = document.getElementById('searchInput2').value.toLowerCase().trim();
+
+        if (document.getElementById('SAFEFilter').checked) selectedStatuses.push('SAFE');
+        if (document.getElementById('SWARMPFilter').checked) selectedStatuses.push('SWARMP');
+        if (document.getElementById('SWARMPExpiredFilter').checked) selectedStatuses.push('SWARMP (EXPIRED)');
+        if (document.getElementById('NoReportFilter').checked) selectedStatuses.push('No Report Filed');
+        if (document.getElementById('UNSAFEFilter').checked) selectedStatuses.push('UNSAFE');
+
+        if (document.getElementById('EmptyFilter').checked) selectedDates.push('Empty');
+        if (document.getElementById('EstimateDateFilter').checked) selectedDates.push('Estimate Date');
+        if (document.getElementById('JobDateFilter').checked) selectedDates.push('Job Date');
+
+        const filteredLocations = allLocations.filter(location => {
+            const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(location.properties['Current Filing Status']);
+            const matchesSearch1 = query1 === '' || (location.properties['QEWI Name'] && location.properties['QEWI Name'].toLowerCase().includes(query1));
+            const matchesSearch2 = query2 === '' || (location.properties['QEWI Business Name'] && location.properties['QEWI Business Name'].toLowerCase().includes(query2));
+            const matchesDates = selectedDates.length === 0 || 
+                (selectedDates.includes('Empty') && !location.properties['Job Date'] && !location.properties['Estimate Date']) || 
+                (selectedDates.includes('Job Date') && location.properties['Job Date']) ||
+                (selectedDates.includes('Estimate Date') && location.properties['Estimate Date'] && !location.properties['Job Date']); // Добавлены условия для Estimate Date
+
+            return matchesStatus && matchesSearch1 && matchesSearch2 && matchesDates;
+        });
+
+        updateGeoJSONData({ 
+            "type": "FeatureCollection", 
+            "features": filteredLocations 
+        }); // Обновляем данные в слое
+    }
+
+    // Функция поиска по QEWI Name и QEWI Business Name
+    function searchData(fieldNumber) {
+        const query1 = document.getElementById('searchInput1').value.toLowerCase().trim();
+        const query2 = document.getElementById('searchInput2').value.toLowerCase().trim();
+        searchResults1.innerHTML = '';
+        searchResults2.innerHTML = '';
+        searchResults1.style.display = 'none';
+        searchResults2.style.display = 'none';
+
+        let filteredLocations = allLocations;
+
+        // Если в первом поле есть запрос, фильтруем по QEWI Name
+        if (query1.length >= 2 || fieldNumber === 1) {
+            filteredLocations = filteredLocations.filter(location => 
+                location.properties['QEWI Name'] && location.properties['QEWI Name'].toLowerCase().includes(query1));
+        }
+
+        // Если во втором поле есть запрос, фильтруем по QEWI Business Name
+        if (query2.length >= 2 || fieldNumber === 2) {
+            filteredLocations = filteredLocations.filter(location =>
+                location.properties['QEWI Name'] && location.properties['QEWI Name'].toLowerCase().includes(query2));
+        }
+
+        const uniqueNames = new Set();
+        const uniqueBusinesses = new Set();
+
+        filteredLocations.forEach(location => {
+            if (location.properties['QEWI Name']) uniqueNames.add(location.properties['QEWI Name']);
+            if (location.properties['QEWI Name']) uniqueBusinesses.add(location.properties['QEWI Name']);
+        });
+
+        // Если изменено поле поиска по QEWI Name
+        if (fieldNumber === 1 && query1.length > 0) {
+            if (uniqueNames.size > 0) {
+                searchResults1.style.display = 'block';
+                uniqueNames.forEach(name => {
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'result-item';
+                    resultItem.textContent = name;
+                    resultItem.onclick = () => {
+                        document.getElementById('searchInput1').value = name;
+                        updateMarkers(); // Обновляем маркеры после выбора значения
+                        searchResults1.style.display = 'none';
+                    };
+                    searchResults1.appendChild(resultItem);
+                });
+            }
+        }
+
+        // Если изменено поле поиска по QEWI Business Name
+        if (fieldNumber === 2 && query2.length > 0) {
+            if (uniqueBusinesses.size > 0) {
+                searchResults2.style.display = 'block';
+                uniqueBusinesses.forEach(business => {
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'result-item';
+                    resultItem.textContent = business;
+                    resultItem.onclick = () => {
+                        document.getElementById('searchInput2').value = business;
+                        updateMarkers(); // Обновляем маркеры после выбора значения
+                        searchResults2.style.display = 'none';
+                    };
+                    searchResults2.appendChild(resultItem);
+                });
+            }
+        }
+
+        updateMarkers(); // Обновляем маркеры после поиска
+    }
+
+    // Сброс поиска и отображение всех маркеров при изменении поля ввода
+    document.getElementById('searchInput1').addEventListener('input', () => {
+        const query1 = document.getElementById('searchInput1').value.trim();
+        if (query1 === '') {
+            searchResults1.innerHTML = '';
+            searchResults1.style.display = 'none';
+        }
+        updateMarkers(); // Обновляем маркеры при изменении поля ввода
+    });
+
+    document.getElementById('searchInput2').addEventListener('input', () => {
+        const query2 = document.getElementById('searchInput2').value.trim();
+        if (query2 === '') {
+            searchResults2.innerHTML = '';
+            searchResults2.style.display = 'none';
+        }
+        updateMarkers(); // Обновляем маркеры при изменении поля ввода
+    });
+
+    // Закрытие Popup
+    function closePopup() {
+        document.getElementById('popupContainer').style.display = 'none';
+    }
+</script>
+
+</body>
+</html>
