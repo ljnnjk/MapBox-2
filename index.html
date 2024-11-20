@@ -15,19 +15,21 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: flex;
             flex-wrap: wrap;
+            flex-direction: column; /* Makes search inputs stack vertically */
         }
         .filter-option {
             margin-right: 15px;
             margin-bottom: 5px;
         }
-        #searchInput1, #searchInput2 {
+        #searchInput1, #searchInput2, #searchInput3 {
             flex: 1;
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
             margin-right: 10px;
+            margin-bottom: 10px; /* Add spacing between inputs */
         }
-        #searchResults1, #searchResults2 {
+        #searchResults1, #searchResults2, #searchResults3 {
             width: 100%;
             margin-top: 10px;
             border: 1px solid #ddd;
@@ -45,16 +47,16 @@
         }
         #popupContainer {
             position: absolute;
-            z-index: 1000; /* Ensure it's on top of the map */
-            top: 10px; /* Adjust top position as needed */
-            left: 10px; /* Adjust left position as needed */
+            z-index: 1000;
+            top: 10px;
+            left: 10px;
             background-color: white;
             padding: 10px;
             border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Optional shadow */
-            display: none; /* Hide it initially */
-            max-height: 400px; /* Set a maximum height for the popup */
-            overflow-y: auto; /* Enable vertical scrolling */
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            display: none;
+            max-height: 400px;
+            overflow-y: auto;
         }
         #popupCloseButton {
             position: absolute;
@@ -71,6 +73,8 @@
     <div id="searchResults1"></div>
     <input type="text" id="searchInput2" placeholder="Поиск по QEWI Business Name" onkeyup="searchData(2)">
     <div id="searchResults2"></div>
+    <input type="text" id="searchInput3" placeholder="Поиск по GC Who requested estimate" onkeyup="searchData(3)">
+    <div id="searchResults3"></div>
 </div>
 
 <div id="filterPanel">
@@ -101,7 +105,7 @@
 </div>
 
 <div id="map"></div>
-<div id="popupContainer"></div> 
+<div id="popupContainer"></div>
 
 <script>
     mapboxgl.accessToken = 'pk.eyJ1IjoibGlubmlrYWdlbmN5IiwiYSI6ImNtMzRtZWlnYzAxNmUyanF4ZmxxZnJnc24ifQ.PyWdx3E09PfzIcF_SQyvWA';
@@ -117,21 +121,22 @@
     let groupedLocations = {};
     let searchResults1 = document.getElementById('searchResults1');
     let searchResults2 = document.getElementById('searchResults2');
+    let searchResults3 = document.getElementById('searchResults3');
     const offset = 0.0001;
     const positionCounts = {};
     let currentQuery1 = '';
     let currentQuery2 = '';
+    let currentQuery3 = '';
 
     map.on('load', () => {
         map.addSource('places', {
             type: 'geojson',
-            data: 'Final.json', // Ваш файл JSON в формате GeoJSON
+            data: 'Final.json',
             cluster: false,
             clusterMaxZoom: 14,
             clusterRadius: 50
         });
 
-        // Слой для маркеров
         map.addLayer({
             id: 'places-layer',
             type: 'circle',
@@ -140,14 +145,12 @@
                 'circle-color': [
                     'match',
                     ['get', 'Current Filing Status'],
-                    'SAFE', '#28a745', // Зеленый
-                    'SWARMP', '#ffc107', // Желтый
-                    'SWARMP (EXPIRED)', '#0000ff', // синий
-                    'No Report Filed', '#6c757d', // Серый
-                    'UNSAFE', '#ff0000', // Красный
-                    /* Add more colors for other statuses */
-                    '#888888' // Черный (по умолчанию)
-                    
+                    'SAFE', '#28a745',
+                    'SWARMP', '#ffc107',
+                    'SWARMP (EXPIRED)', '#0000ff',
+                    'No Report Filed', '#6c757d',
+                    'UNSAFE', '#ff0000',
+                    '#888888'
                 ],
                 'circle-radius': 6,
                 'circle-stroke-width': 1,
@@ -155,16 +158,14 @@
             }
         });
 
-        // Загрузка данных GeoJSON
-        fetch('Final.json') 
+        fetch('Final.json')
             .then(response => response.json())
             .then(data => {
                 allLocations = data.features;
                 groupLocations();
-                updateGeoJSONData(data); // Обновляем данные в слое
+                updateGeoJSONData(data);
             });
 
-        // Клик на маркере для вывода инфо
         map.on('click', 'places-layer', (e) => {
             const coordinates = e.features[0].geometry.coordinates.slice();
             const properties = e.features[0].properties;
@@ -204,13 +205,8 @@
                 ${properties['Notes'] ? `<p><strong>Notes:</strong> ${properties['Notes']}</p>` : ''}
             `;
 
-            // Get the popup container element
             const popupContainer = document.getElementById('popupContainer');
-
-            // Clear any existing popup
             popupContainer.innerHTML = '';
-
-            // Update the container's content and visibility
             popupContainer.innerHTML = infoWindowContent;
             popupContainer.style.display = 'block';
         });
@@ -234,17 +230,16 @@
         });
     }
 
-    // Функция для обновления данных GeoJSON в слое
     function updateGeoJSONData(data) {
         map.getSource('places').setData(data);
     }
 
-    // Функция для обновления маркеров с учетом фильтров и поиска
     function updateMarkers() {
         const selectedStatuses = [];
         const selectedDates = [];
         const query1 = document.getElementById('searchInput1').value.toLowerCase().trim();
         const query2 = document.getElementById('searchInput2').value.toLowerCase().trim();
+        const query3 = document.getElementById('searchInput3').value.toLowerCase().trim();
 
         if (document.getElementById('SAFEFilter').checked) selectedStatuses.push('SAFE');
         if (document.getElementById('SWARMPFilter').checked) selectedStatuses.push('SWARMP');
@@ -260,52 +255,60 @@
             const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(location.properties['Current Filing Status']);
             const matchesSearch1 = query1 === '' || (location.properties['QEWI Name'] && location.properties['QEWI Name'].toLowerCase().includes(query1));
             const matchesSearch2 = query2 === '' || (location.properties['QEWI Business Name'] && location.properties['QEWI Business Name'].toLowerCase().includes(query2));
-            const matchesDates = selectedDates.length === 0 || 
-                (selectedDates.includes('Empty') && !location.properties['Job Date'] && !location.properties['Estimate Date']) || 
+            const matchesSearch3 = query3 === '' || (location.properties['GC Who requested estimate'] && location.properties['GC Who requested estimate'].toLowerCase().includes(query3));
+            const matchesDates = selectedDates.length === 0 ||
+                (selectedDates.includes('Empty') && !location.properties['Job Date'] && !location.properties['Estimate Date']) ||
                 (selectedDates.includes('Job Date') && location.properties['Job Date']) ||
-                (selectedDates.includes('Estimate Date') && location.properties['Estimate Date'] && !location.properties['Job Date']); // Добавлены условия для Estimate Date
+                (selectedDates.includes('Estimate Date') && location.properties['Estimate Date'] && !location.properties['Job Date']);
 
-            return matchesStatus && matchesSearch1 && matchesSearch2 && matchesDates;
+            return matchesStatus && matchesSearch1 && matchesSearch2 && matchesSearch3 && matchesDates;
         });
 
-        updateGeoJSONData({ 
-            "type": "FeatureCollection", 
-            "features": filteredLocations 
-        }); // Обновляем данные в слое
+        updateGeoJSONData({
+            "type": "FeatureCollection",
+            "features": filteredLocations
+        });
     }
 
-    // Функция поиска по QEWI Name и QEWI Business Name
     function searchData(fieldNumber) {
         const query1 = document.getElementById('searchInput1').value.toLowerCase().trim();
         const query2 = document.getElementById('searchInput2').value.toLowerCase().trim();
+        const query3 = document.getElementById('searchInput3').value.toLowerCase().trim();
+
         searchResults1.innerHTML = '';
         searchResults2.innerHTML = '';
+        searchResults3.innerHTML = '';
         searchResults1.style.display = 'none';
         searchResults2.style.display = 'none';
+        searchResults3.style.display = 'none';
 
         let filteredLocations = allLocations;
 
-        // Если в первом поле есть запрос, фильтруем по QEWI Name
         if (query1.length >= 2 || fieldNumber === 1) {
-            filteredLocations = filteredLocations.filter(location => 
+            filteredLocations = filteredLocations.filter(location =>
                 location.properties['QEWI Name'] && location.properties['QEWI Name'].toLowerCase().includes(query1));
         }
 
-        // Если во втором поле есть запрос, фильтруем по QEWI Business Name
         if (query2.length >= 2 || fieldNumber === 2) {
             filteredLocations = filteredLocations.filter(location =>
-                location.properties['QEWI Name'] && location.properties['QEWI Name'].toLowerCase().includes(query2));
+                location.properties['QEWI Business Name'] && location.properties['QEWI Business Name'].toLowerCase().includes(query2));
+        }
+
+        if (query3.length >= 2 || fieldNumber === 3) {
+            filteredLocations = filteredLocations.filter(location =>
+                location.properties['GC Who requested estimate'] && location.properties['GC Who requested estimate'].toLowerCase().includes(query3));
         }
 
         const uniqueNames = new Set();
         const uniqueBusinesses = new Set();
+        const uniqueGCs = new Set();
 
         filteredLocations.forEach(location => {
             if (location.properties['QEWI Name']) uniqueNames.add(location.properties['QEWI Name']);
-            if (location.properties['QEWI Name']) uniqueBusinesses.add(location.properties['QEWI Name']);
+            if (location.properties['QEWI Business Name']) uniqueBusinesses.add(location.properties['QEWI Business Name']);
+            if (location.properties['GC Who requested estimate']) uniqueGCs.add(location.properties['GC Who requested estimate']);
         });
 
-        // Если изменено поле поиска по QEWI Name
         if (fieldNumber === 1 && query1.length > 0) {
             if (uniqueNames.size > 0) {
                 searchResults1.style.display = 'block';
@@ -315,7 +318,7 @@
                     resultItem.textContent = name;
                     resultItem.onclick = () => {
                         document.getElementById('searchInput1').value = name;
-                        updateMarkers(); // Обновляем маркеры после выбора значения
+                        updateMarkers();
                         searchResults1.style.display = 'none';
                     };
                     searchResults1.appendChild(resultItem);
@@ -323,7 +326,6 @@
             }
         }
 
-        // Если изменено поле поиска по QEWI Business Name
         if (fieldNumber === 2 && query2.length > 0) {
             if (uniqueBusinesses.size > 0) {
                 searchResults2.style.display = 'block';
@@ -333,7 +335,7 @@
                     resultItem.textContent = business;
                     resultItem.onclick = () => {
                         document.getElementById('searchInput2').value = business;
-                        updateMarkers(); // Обновляем маркеры после выбора значения
+                        updateMarkers();
                         searchResults2.style.display = 'none';
                     };
                     searchResults2.appendChild(resultItem);
@@ -341,17 +343,33 @@
             }
         }
 
-        updateMarkers(); // Обновляем маркеры после поиска
+        if (fieldNumber === 3 && query3.length > 0) {
+            if (uniqueGCs.size > 0) {
+                searchResults3.style.display = 'block';
+                uniqueGCs.forEach(gc => {
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'result-item';
+                    resultItem.textContent = gc;
+                    resultItem.onclick = () => {
+                        document.getElementById('searchInput3').value = gc;
+                        updateMarkers();
+                        searchResults3.style.display = 'none';
+                    };
+                    searchResults3.appendChild(resultItem);
+                });
+            }
+        }
+
+        updateMarkers();
     }
 
-    // Сброс поиска и отображение всех маркеров при изменении поля ввода
     document.getElementById('searchInput1').addEventListener('input', () => {
         const query1 = document.getElementById('searchInput1').value.trim();
         if (query1 === '') {
             searchResults1.innerHTML = '';
             searchResults1.style.display = 'none';
         }
-        updateMarkers(); // Обновляем маркеры при изменении поля ввода
+        updateMarkers();
     });
 
     document.getElementById('searchInput2').addEventListener('input', () => {
@@ -360,10 +378,18 @@
             searchResults2.innerHTML = '';
             searchResults2.style.display = 'none';
         }
-        updateMarkers(); // Обновляем маркеры при изменении поля ввода
+        updateMarkers();
     });
 
-    // Закрытие Popup
+    document.getElementById('searchInput3').addEventListener('input', () => {
+        const query3 = document.getElementById('searchInput3').value.trim();
+        if (query3 === '') {
+            searchResults3.innerHTML = '';
+            searchResults3.style.display = 'none';
+        }
+        updateMarkers();
+    });
+
     function closePopup() {
         document.getElementById('popupContainer').style.display = 'none';
     }
