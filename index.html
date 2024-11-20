@@ -142,7 +142,7 @@
     map.on('load', () => {
         map.addSource('places', {
             type: 'geojson',
-            data: 'Final.json',
+            data: 'filtered_final.json',
             cluster: false,
             clusterMaxZoom: 14,
             clusterRadius: 50
@@ -169,7 +169,7 @@
             }
         });
 
-        fetch('Final.json')
+        fetch('filtered_final.json')
             .then(response => response.json())
             .then(data => {
                 allLocations = data.features;
