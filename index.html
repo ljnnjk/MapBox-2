@@ -2,409 +2,624 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Optimized Map with Mapbox</title>
-    <link href="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.css" rel="stylesheet">
+    <title>Map with Point Adding and Editing</title>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.js"></script>
     <style>
-        #map { height: 80vh; width: 100%; }
-        #filterPanel {
-            padding: 10px;
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            margin: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            display: flex;
-            flex-wrap: wrap;
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #editPointButton, #addPointButton, #cancelButton, #cancelEditButton {
+            position: absolute;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 10px;
         }
-
+        #editPointButton {
+            top: 10px;
+            right: 10px;
+            background-color: #2196F3;
+            color: white;
+        }
+        #addPointButton {
+            top: 10px;
+            right: 110px;
+            background-color: #4CAF50;
+            color: white;
+        }
+        #cancelButton, #cancelEditButton {
+            background-color: #e7b3b8;
+            color: white;
+            margin-left: 10px;
+        }
         #searchPanel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
             padding: 10px;
             background-color: #f9f9f9;
             border: 1px solid #ddd;
-            margin: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            display: flex;
-            flex-wrap: wrap;
-            flex-direction: column; /* Makes search inputs stack vertically */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
         }
-
-        .filter-option {
-            margin-right: 15px;
-            margin-bottom: 5px;
-        }
-        #searchInput1, #searchInput2, #searchInput3 {
-            flex: 1;
+        #searchPanel input[type="text"] {
+            width: 300px;
+            box-sizing: border-box;
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
-            margin-right: 10px;
-            margin-bottom: 10px; /* Add spacing between inputs */
+            margin-bottom: 10px;
         }
-        #searchResults1, #searchResults2, #searchResults3 {
-            width: 100%;
-            margin-top: 10px;
-            border: 1px solid #ddd;
-            background-color: #fff;
-            max-height: 150px;
-            overflow-y: auto;
-            display: none;
+        #popup {
+            max-width: 400px; 
+            width: 350px;
+            overflow-y: auto; 
         }
-        .result-item {
-            padding: 8px;
-            cursor: pointer;
-        }
-        .result-item:hover {
-            background-color: #f1f1f1;
-        }
-        #popupContainer {
-            position: absolute;
-            z-index: 1000;
-            top: 10px;
-            left: 10px;
-            background-color: white;
+        .mapboxgl-popup-content {
             padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            display: none;
-            max-height: 400px;
-            overflow-y: auto;
         }
-        #popupCloseButton {
+        .close-button {
             position: absolute;
             top: 10px;
-            right: 10px;
+            right: 10px; 
             cursor: pointer;
+        }
+        .edit-button {
+            margin-top: 10px;
+            display: block;
+        }
+        #filterContainer {
+            position: absolute;
+            top: 100px;
+            left: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+        #filterContainer label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        #filterContainer input[type="radio"] {
+            margin-right: 5px;
+        }
+        #editForm {
+            display: none; /* Initially hidden */
+            position: absolute; /* To position it on the map */
+            z-index: 1001; /* Ensure it's above the map */
+            background-color: white;
+            padding: 20px;
+            border: 1px solid #ccc;
+        }
+        #editForm input[type="text"], #editForm select {
+            width: 250px;
+            box-sizing: border-box;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        #addPointForm {
+            max-height: 600px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            display: none;
+            top: 60px;
+            left: 10px;
+            max-width: 850px; 
+            width: 850px;    
+            z-index: 500;
+        }
+        #addPointForm input[type="text"], #addPointForm select{
+            width: 850px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            overflow-y: auto;
+        }
+        #choosePointMessage {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border: 1px solid #ccc;
+            z-index: 1001;
         }
     </style>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
 </head>
 <body>
+    <div id="searchPanel">
+        <input type="text" id="searchCustomer" placeholder="Поиск по Customer Name" onkeyup="updateMarkers()">
+        <input type="text" id="searchLocation" placeholder="Поиск по Location Address" onkeyup="updateMarkers()">
+        <input type="text" id="searchCompany" placeholder="Поиск по Company Name" onkeyup="updateMarkers()">
+    </div>
+    <div id="filterContainer"></div>
+    <div id="map"></div>
+    <button id="addPointButton">Add Point</button>
+    <button id="editPointButton">Edit Point</button>
+    <div id="choosePointMessage">
+        Choose a point to add or edit. <button id="cancelButton">Cancel</button><button id="cancelEditButton">Cancel Edit</button>
+    </div>
+    <div id="addPointForm"></div>
+    <div id="editForm"></div>
 
-<div id="searchPanel">
-    <input type="text" id="searchInput1" placeholder="Поиск по QEWI Name" onkeyup="searchData(1)">
-    <div id="searchResults1"></div>
-    <input type="text" id="searchInput2" placeholder="Поиск по QEWI Business Name" onkeyup="searchData(2)">
-    <div id="searchResults2"></div>
-    <input type="text" id="searchInput3" placeholder="Поиск по GC General Contractor" onkeyup="searchData(3)">
-    <div id="searchResults3"></div>
-</div>
+    <script>
+        let allLocations = [];
+        let popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 25 });
+        let addingPoint = false;
+        let editingPoint = false;
+        let selectedPointId = null;
+        let map;
+        let selectedCoordinates;
+        const referenceDate = new Date(2024, 1, 12);
 
-<div id="filterPanel">
-    <label class="filter-option">
-        <input type="checkbox" id="SAFEFilter" value="SAFE" onchange="updateMarkers()"> SAFE
-    </label>
-    <label class="filter-option">
-        <input type="checkbox" id="SWARMPFilter" value="SWARMP" onchange="updateMarkers()"> SWARMP
-    </label>
-    <label class="filter-option">
-        <input type="checkbox" id="SWARMPExpiredFilter" value="SWARMP (EXPIRED)" onchange="updateMarkers()"> SWARMP (EXPIRED)
-    </label>
-    <label class="filter-option">
-        <input type="checkbox" id="NoReportFilter" value="No Report Filed" onchange="updateMarkers()"> No Report Filed
-    </label>
-    <label class="filter-option">
-        <input type="checkbox" id="UNSAFEFilter" value="UNSAFE" onchange="updateMarkers()"> UNSAFE
-    </label>
-    <label class="filter-option">
-        <input type="checkbox" id="EmptyFilter" value="Empty" onchange="updateMarkers()"> Empty
-    </label>
-    <label class="filter-option">
-        <input type="checkbox" id="EstimateDateFilter" value="Estimate Date" onchange="updateMarkers()"> Estimate Date
-    </label>
-    <label class="filter-option">
-        <input type="checkbox" id="JobDateFilter" value="Job Date" onchange="updateMarkers()"> Job Date
-    </label>
-</div>
+        function initializeMap() {
+            mapboxgl.accessToken = 'pk.eyJ1IjoibGlubmlrYWdlbmN5IiwiYSI6ImNtMzRtZWlnYzAxNmUyanF4ZmxxZnJnc24ifQ.PyWdx3E09PfzIcF_SQyvWA'; // Replace with your Mapbox access token
 
-<div id="map"></div>
-<div id="popupContainer"></div>
-
-<script>
-    mapboxgl.accessToken = 'pk.eyJ1IjoibGlubmlrYWdlbmN5IiwiYSI6ImNtMzRtZWlnYzAxNmUyanF4ZmxxZnJnc24ifQ.PyWdx3E09PfzIcF_SQyvWA';
-    const map = new mapboxgl.Map({
-        container: 'map',
-        style: 'mapbox://styles/mapbox/streets-v11',
-        center: [-74.0060, 40.7128],
-        zoom: 12
-    });
-
-    let markers = [];
-    let allLocations = [];
-    let groupedLocations = {};
-    let searchResults1 = document.getElementById('searchResults1');
-    let searchResults2 = document.getElementById('searchResults2');
-    let searchResults3 = document.getElementById('searchResults3');
-    const offset = 0.0001;
-    const positionCounts = {};
-    let currentQuery1 = '';
-    let currentQuery2 = '';
-    let currentQuery3 = '';
-
-    map.on('load', () => {
-        map.addSource('places', {
-            type: 'geojson',
-            data: 'filtered_final.json',
-            cluster: false,
-            clusterMaxZoom: 14,
-            clusterRadius: 50
-        });
-
-        map.addLayer({
-            id: 'places-layer',
-            type: 'circle',
-            source: 'places',
-            paint: {
-                'circle-color': [
-                    'match',
-                    ['get', 'Current Filing Status'],
-                    'SAFE', '#28a745',
-                    'SWARMP', '#ffc107',
-                    'SWARMP (EXPIRED)', '#0000ff',
-                    'No Report Filed', '#6c757d',
-                    'UNSAFE', '#ff0000',
-                    '#888888'
-                ],
-                'circle-radius': 6,
-                'circle-stroke-width': 1,
-                'circle-stroke-color': '#011022'
-            }
-        });
-
-        fetch('filtered_final.json')
-            .then(response => response.json())
-            .then(data => {
-                allLocations = data.features;
-                groupLocations();
-                updateGeoJSONData(data);
+            map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/streets-v11',
+                center: [0, 0],
+                zoom: 2
             });
 
-        map.on('click', 'places-layer', (e) => {
-            const coordinates = e.features[0].geometry.coordinates.slice();
-            const properties = e.features[0].properties;
-            const infoWindowContent = `
-                <span id="popupCloseButton" onclick="closePopup()">×</span>
-                <h3>${properties.Address}</h3>
-                ${properties['Cycle'] ? `<p><strong>Cycle:</strong> ${properties['Cycle']}</p>` : ''}
-                ${properties['Control Number'] ? `<p><strong>Control Number:</strong> ${properties['Control Number']}</p>` : ''}
-                ${properties['Initial Filing Status'] ? `<p><strong>Initial Filing Status:</strong> ${properties['Initial Filing Status']}</p>` : ''}
-                ${properties['Current Filing Status'] ? `<p><strong>Current Filing Status:</strong> ${properties['Current Filing Status']}</p>` : ''}
-                ${properties['Effective Filing Date'] ? `<p><strong>Effective Filing Date:</strong> ${properties['Effective Filing Date']}</p>` : ''}
-                ${properties['SWARMP Completion Date'] ? `<p><strong>SWARMP Completion Date:</strong> ${properties['SWARMP Completion Date']}</p>` : ''}
-                ${properties['QEWI Name'] ? `<p><strong>QEWI Name:</strong> ${properties['QEWI Name']}</p>` : ''}
-                ${properties['QEWI Name'] ? `<p><strong>QEWI Business Name:</strong> ${properties['QEWI Name']}</p>` : ''}
-                ${properties['QEWI E-mail'] ? `<p><strong>QEWI E-mail:</strong> ${properties['QEWI E-mail']}</p>` : ''}
-                ${properties['QEWI Phone'] ? `<p><strong>QEWI Phone:</strong> ${properties['QEWI Phone']}</p>` : ''}
-                ${properties['QEWI AF ID'] ? `<p><strong>QEWI AF ID:</strong> ${properties['QEWI AF ID']}</p>` : ''}
-                ${properties['Owner Name'] ? `<p><strong>Owner Name:</strong> ${properties['Owner Name']}</p>` : ''}
-                ${properties['Owner Type'] ? `<p><strong>Owner Type:</strong> ${properties['Owner Type']}</p>` : ''}
-                ${properties['Number'] ? `<p><strong>Number:</strong> ${properties['Number']}</p>` : ''}
-                ${properties['Address'] ? `<p><strong>Address:</strong> ${properties['Address']}</p>` : ''}
-                ${properties['Bin'] ? `<p><strong>Bin:</strong> ${properties['Bin']}</p>` : ''}
-                ${properties['Hired By'] ? `<p><strong>Hired By:</strong> ${properties['Hired By']}</p>` : ''}
-                ${properties['Borough'] ? `<p><strong>Borough:</strong> ${properties['Borough']}</p>` : ''}
-                ${properties['Block'] ? `<p><strong>Block:</strong> ${properties['Block']}</p>` : ''}
-                ${properties['Lot'] ? `<p><strong>Lot:</strong> ${properties['Lot']}</p>` : ''}
-                ${properties['Unsafe Completion Date'] ? `<p><strong>Unsafe Completion Date:</strong> ${properties['Unsafe Completion Date']}</p>` : ''}
-                ${properties['Estimate Date'] ? `<p><strong>Estimate Date:</strong> ${properties['Estimate Date']}</p>` : ''}
-                ${properties['Job Date'] ? `<p><strong>Job Date:</strong> ${properties['Job Date']}</p>` : ''}
-                ${properties['GC Who requested estimate'] ? `<p><strong>GC Who requested estimate:</strong> ${properties['GC Who requested estimate']}</p>` : ''}
-                ${properties['How'] ? `<p><strong>How:</strong> ${properties['How']}</p>` : ''}
-                ${properties['Building Management'] ? `<p><strong>Building Management:</strong> ${properties['Building Management']}</p>` : ''}
-                ${properties['BM Name'] ? `<p><strong>BM Name:</strong> ${properties['BM Name']}</p>` : ''}
-                ${properties['BM E-mail'] ? `<p><strong>BM E-mail:</strong> ${properties['BM E-mail']}</p>` : ''}
-                ${properties['BM Phone'] ? `<p><strong>BM Phone:</strong> ${properties['BM Phone']}</p>` : ''}
-                ${properties['BM AF ID'] ? `<p><strong>BM AF ID:</strong> ${properties['BM AF ID']}</p>` : ''}
-                ${properties['Notes'] ? `<p><strong>Notes:</strong> ${properties['Notes']}</p>` : ''}
+            map.on('load', () => {
+                fetchLocations();
+            });
+
+            return map;
+        }
+
+        function addPointToMap(e) {
+            map.off('click', addPointToMap);
+            addingPoint = false;
+            document.getElementById('choosePointMessage').style.display = 'none';
+            document.getElementById('addPointButton').style.display = 'block';
+            document.getElementById('editPointButton').style.display = 'block';
+            document.getElementById('cancelButton').style.display = 'none';
+            document.getElementById('cancelEditButton').style.display = 'none';
+        
+            const coordinates = e.lngLat;
+            const popupContent = `
+                <div id="addPointPopup">
+                    <span class="close-button" onclick="popup.remove()">×</span>
+                    <form id="pointForm" enctype="multipart/form-data">
+                        <input type="hidden" id="longitude" name="longitude" value="">
+                        <input type="hidden" id="latitude" name="latitude" value="">
+                        <label for="jobNumber">Job #:</label>
+                        <input type="text" id="jobNumber" name="jobNumber"><br><br>
+                        <label for="companyName">Company Name:</label>
+                        <input type="text" id="companyName" name="companyName" required><br><br>
+                        <label for="companyPhone">Company Phone:</label>
+                        <input type="text" id="companyPhone" name="companyPhone"><br><br>
+                        <label for="companyEmail">Company Email:</label>
+                        <input type="text" id="companyEmail" name="companyEmail"><br><br>
+                        <label for="customerName">Customer Name:</label>
+                        <input type="text" id="customerName" name="customerName" required><br><br>
+                        <label for="customerPhone">Customer Phone:</label>
+                        <input type="text" id="customerPhone" name="customerPhone"><br><br>
+                        <label for="customerEmail">Customer Email:</label>
+                        <input type="text" id="customerEmail" name="customerEmail"><br><br>
+                        <label for="assignedTechnicians">Assigned Technicians:</label>
+                        <input type="text" id="assignedTechnicians" name="assignedTechnicians"><br><br>
+                        <label for="completionDate">Completion Date (YYYY-MM-DD):</label>
+                        <input type="text" id="completionDate" name="completionDate"><br><br>
+                        <label for="locationAddress">Location Address:</label>
+                        <input type="text" id="locationAddress" name="locationAddress" required><br><br>
+                        <label for="lastJobDate">Last Job Date (MM.DD.YYYY):</label>
+                        <input type="text" id="lastJobDate" name="lastJobDate"><br><br>
+                        <label for="jobsTotal">Jobs Total:</label>
+                        <input type="text" id="jobsTotal" name="jobsTotal"><br><br>
+                        <label for="team">Team:</label>
+                        <input type="text" id="team" name="team"><br><br>
+                        <label for="estimate">Estimate:</label>
+                        <input type="text" id="estimate" name="estimate"><br><br>
+                        <label for="serviceTitanLink">Service Titan Link:</label>
+                        <input type="text" id="serviceTitanLink" name="serviceTitanLink"><br><br>
+                        <label for="file">Attach File:</label>
+                        <input type="file" id="file" name="file"><br><br>
+                        <button type="submit">Add Point</button>
+                    </form>
+                </div>
+            `;
+            document.getElementById('addPointForm').style.display = 'block';
+            popup.setLngLat(coordinates).setHTML(popupContent).addTo(map);
+        
+            const pointForm = document.getElementById('pointForm');
+            pointForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+        
+                // Get longitude and latitude from hidden fields
+                const longitudeInput = document.getElementById('longitude');
+                const latitudeInput = document.getElementById('latitude');
+        
+                longitudeInput.value = coordinates.lng;
+                latitudeInput.value = coordinates.lat;
+        
+        
+                const formData = new FormData(pointForm);
+                try {
+                    const response = await fetch('http://localhost:3000/locations', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+                        throw new Error(`HTTP error! status: ${response.status}, details: ${JSON.stringify(errorData)}`);
+                    }
+                    const addedData = await response.json();
+                    console.log('Point added successfully:', addedData);
+                    fetchLocations();
+                    document.getElementById('addPointForm').style.display = 'none';
+                    popup.remove();
+                } catch (error) {
+                    console.error('Error adding point:', error);
+                    alert('Error adding point: ' + error.message);
+                }
+            });
+        }
+
+        function editPointToMap(e) {
+            const features = map.queryRenderedFeatures(e.point, { layers: ['places'] });
+            if (features.length > 0) {
+                const feature = features[0];
+                selectedPointId = feature.properties.id;
+                selectedCoordinates = feature.geometry.coordinates;
+                populateEditForm(feature.properties); 
+                map.off('click', editPointToMap); 
+            }
+        }
+
+        async function populateEditForm(pointData) {
+            editForm.style.display = 'block';
+            editForm.innerHTML = `
+                <form id="editFormForm" enctype="multipart/form-data">
+                    <input type="hidden" id="id" name="id" value="${pointData.id}" readonly>
+                    <input type="hidden" id="longitude" name="longitude" value="${selectedCoordinates[0]}" readonly>
+                    <input type="hidden" id="latitude" name="latitude" value="${selectedCoordinates[1]}" readonly>
+                    <label for="jobNumber">Job #:</label>
+                    <input type="text" id="jobNumber" name="Job #" value="${pointData['Job #']}" ><br><br>  <!-- Corrected name -->
+                    <label for="companyName">Company Name:</label>
+                    <input type="text" id="companyName" name="Company Name" value="${pointData['Company Name']}" required><br><br> <!-- Corrected name -->
+                    <label for="companyPhone">Company Phone:</label>
+                    <input type="text" id="companyPhone" name="Company Phone" value="${pointData['Company Phone']}" ><br><br> <!-- Corrected name -->
+                    <label for="companyEmail">Company Email:</label>
+                    <input type="text" id="companyEmail" name="Company Email" value="${pointData['Company Email']}" ><br><br> <!-- Corrected name -->
+                    <label for="customerName">Customer Name:</label>
+                    <input type="text" id="customerName" name="Customer Name" value="${pointData['Customer Name']}" required><br><br> <!-- Corrected name -->
+                    <label for="customerPhone">Customer Phone:</label>
+                    <input type="text" id="customerPhone" name="Customer Phone" value="${pointData['Customer Phone']}" ><br><br> <!-- Corrected name -->
+                    <label for="customerEmail">Customer Email:</label>
+                    <input type="text" id="customerEmail" name="Customer Email" value="${pointData['Customer Email']}" ><br><br> <!-- Corrected name -->
+                    <label for="assignedTechnicians">Assigned Technicians:</label>
+                    <input type="text" id="assignedTechnicians" name="Assigned Technicians" value="${pointData['Assigned Technicians']}" ><br><br> <!-- Corrected name -->
+                    <label for="completionDate">Completion Date (YYYY-MM-DD):</label>
+                    <input type="text" id="completionDate" name="Completion Date" value="${pointData['Completion Date']}" ><br><br> <!-- Corrected name -->
+                    <label for="locationAddress">Location Address:</label>
+                    <input type="text" id="locationAddress" name="Location Address" value="${pointData['Location Address']}" required><br><br> <!-- Corrected name -->
+                    <label for="lastJobDate">Last Job Date (MM.DD.YYYY):</label>
+                    <input type="text" id="lastJobDate" name="Last Job Date" value="${pointData['Last Job Date']}" ><br><br> <!-- Corrected name -->
+                    <label for="jobsTotal">Jobs Total:</label>
+                    <input type="text" id="jobsTotal" name="Jobs Total" value="${pointData['Jobs Total']}" ><br><br> <!-- Corrected name -->
+                    <label for="team">Team:</label>
+                    <input type="text" id="team" name="Team" value="${pointData['Team']}" ><br><br> <!-- Corrected name -->
+                    <label for="estimate">Estimate:</label>
+                    <input type="text" id="estimate" name="Estimate" value="${pointData['Estimate']}" ><br><br> <!-- Corrected name -->
+                    <label for="serviceTitanLink">Service Titan Link:</label>
+                    <input type="text" id="serviceTitanLink" name="Service Titan Link" value="${pointData['Service Titan Link']}" ><br><br> <!-- Corrected name -->
+                    <label for="file">Attach File:</label>
+                    <input type="file" id="file" name="file"><br><br>
+                    <button type="submit">Save Changes</button>
+                    <button type="button" onclick="cancelEdit()">Cancel</button>
+                </form>
             `;
 
-            const popupContainer = document.getElementById('popupContainer');
-            popupContainer.innerHTML = '';
-            popupContainer.innerHTML = infoWindowContent;
-            popupContainer.style.display = 'block';
-        });
-    });
+            const editFormForm = document.getElementById('editFormForm');
+            editFormForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const formData = new FormData(editFormForm);
+                const updatedData = {
+                    id: formData.get('id'),
+                    longitude: formData.get('longitude'),
+                    latitude: formData.get('latitude'),
+                    'Current Filing Status': formData.get('status'),
+                    'Job #': formData.get('jobNumber'),
+                    'Company Name': formData.get('companyName'),
+                    'Company Phone': formData.get('companyPhone'),
+                    'Company Email': formData.get('companyEmail'),
+                    'Customer Name': formData.get('customerName'),
+                    'Customer Phone': formData.get('customerPhone'),
+                    'Customer Email': formData.get('customerEmail'),
+                    'Assigned Technicians': formData.get('assignedTechnicians'),
+                    'Completion Date': formData.get('completionDate'),
+                    'Location Address': formData.get('locationAddress'),
+                    'Last Job Date': formData.get('lastJobDate'),
+                    'Jobs Total': formData.get('jobsTotal'),
+                    Team: formData.get('team'),
+                    Estimate: formData.get('estimate'),
+                    'Service Titan Link': formData.get('serviceTitanLink')
+                };
 
-    function groupLocations() {
-        allLocations.forEach(location => {
-            const controlNumber = location.properties['Control Number'];
-            if (!groupedLocations[controlNumber]) {
-                groupedLocations[controlNumber] = location.properties;
-            } else {
-                const existingLocation = groupedLocations[controlNumber];
-                for (let key in location.properties) {
-                    if (location.properties[key] && existingLocation[key] && location.properties[key] !== existingLocation[key]) {
-                        existingLocation[key] += `, ${location.properties[key]}`;
-                    } else if (!existingLocation[key]) {
-                        existingLocation[key] = location.properties[key];
+                try {
+                    const response = await fetch(`http://localhost:3000/locations/${pointData.id}`, {
+                        method: 'PUT',
+                        body: formData
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({error: response.statusText}));
+                        throw new Error(`HTTP error! status: ${response.status}, details: ${JSON.stringify(errorData)}`);
                     }
+                    const result = await response.json();
+                    console.log('Point updated successfully:', result);
+                    fetchLocations();
+                    editForm.style.display = 'none';
+                } catch (error) {
+                    console.error('Error updating point:', error);
+                    alert('Ошибка обновления точки: ' + error.message);
                 }
+            });
+        }
+
+        async function fetchLocations() {
+            try {
+                const response = await fetch('http://localhost:3000/locations');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                allLocations = data;
+                updateMapData(data);
+            } catch (error) {
+                console.error('Error fetching locations:', error);
+                alert('Ошибка загрузки точек: ' + error.message);
             }
-        });
-    }
-
-    function updateGeoJSONData(data) {
-        map.getSource('places').setData(data);
-    }
-
-    function updateMarkers() {
-        const selectedStatuses = [];
-        const selectedDates = [];
-        const query1 = document.getElementById('searchInput1').value.toLowerCase().trim();
-        const query2 = document.getElementById('searchInput2').value.toLowerCase().trim();
-        const query3 = document.getElementById('searchInput3').value.toLowerCase().trim();
-
-        if (document.getElementById('SAFEFilter').checked) selectedStatuses.push('SAFE');
-        if (document.getElementById('SWARMPFilter').checked) selectedStatuses.push('SWARMP');
-        if (document.getElementById('SWARMPExpiredFilter').checked) selectedStatuses.push('SWARMP (EXPIRED)');
-        if (document.getElementById('NoReportFilter').checked) selectedStatuses.push('No Report Filed');
-        if (document.getElementById('UNSAFEFilter').checked) selectedStatuses.push('UNSAFE');
-
-        if (document.getElementById('EmptyFilter').checked) selectedDates.push('Empty');
-        if (document.getElementById('EstimateDateFilter').checked) selectedDates.push('Estimate Date');
-        if (document.getElementById('JobDateFilter').checked) selectedDates.push('Job Date');
-
-        const filteredLocations = allLocations.filter(location => {
-            const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(location.properties['Current Filing Status']);
-            const matchesSearch1 = query1 === '' || (location.properties['QEWI Name'] && location.properties['QEWI Name'].toLowerCase().includes(query1));
-            const matchesSearch2 = query2 === '' || (location.properties['QEWI Business Name'] && location.properties['QEWI Business Name'].toLowerCase().includes(query2));
-            const matchesSearch3 = query3 === '' || (location.properties['GC Who requested estimate'] && location.properties['GC Who requested estimate'].toLowerCase().includes(query3));
-            const matchesDates = selectedDates.length === 0 ||
-                (selectedDates.includes('Empty') && !location.properties['Job Date'] && !location.properties['Estimate Date']) ||
-                (selectedDates.includes('Job Date') && location.properties['Job Date']) ||
-                (selectedDates.includes('Estimate Date') && location.properties['Estimate Date'] && !location.properties['Job Date']);
-
-            return matchesStatus && matchesSearch1 && matchesSearch2 && matchesSearch3 && matchesDates;
-        });
-
-        updateGeoJSONData({
-            "type": "FeatureCollection",
-            "features": filteredLocations
-        });
-    }
-
-    function searchData(fieldNumber) {
-        const query1 = document.getElementById('searchInput1').value.toLowerCase().trim();
-        const query2 = document.getElementById('searchInput2').value.toLowerCase().trim();
-        const query3 = document.getElementById('searchInput3').value.toLowerCase().trim();
-
-        searchResults1.innerHTML = '';
-        searchResults2.innerHTML = '';
-        searchResults3.innerHTML = '';
-        searchResults1.style.display = 'none';
-        searchResults2.style.display = 'none';
-        searchResults3.style.display = 'none';
-
-        let filteredLocations = allLocations;
-
-        if (query1.length >= 2 || fieldNumber === 1) {
-            filteredLocations = filteredLocations.filter(location =>
-                location.properties['QEWI Name'] && location.properties['QEWI Name'].toLowerCase().includes(query1));
         }
 
-        if (query2.length >= 2 || fieldNumber === 2) {
-            filteredLocations = filteredLocations.filter(location =>
-                location.properties['QEWI Business Name'] && location.properties['QEWI Business Name'].toLowerCase().includes(query2));
-        }
+        function updateMapData(data) {
+            if (map.getSource('places')) {
+                map.getSource('places').setData(data);
+            } else {
+                map.addSource('places', {
+                    type: 'geojson',
+                    data: data
+                });
+                map.addLayer({
+                    id: 'places',
+                    type: 'circle',
+                    source: 'places',
+                    paint: {
+                        'circle-color': ['get', 'color'], 
+                        'circle-radius': 10,
+                        'circle-stroke-width': 1,
+                        'circle-stroke-color': '#ffffff'
+                    }
+                });
 
-        if (query3.length >= 2 || fieldNumber === 3) {
-            filteredLocations = filteredLocations.filter(location =>
-                location.properties['GC Who requested estimate'] && location.properties['GC Who requested estimate'].toLowerCase().includes(query3));
-        }
+                map.on('click', 'places', (e) => {
+                    const properties = e.features[0].properties;
+                    const coordinates = e.features[0].geometry.coordinates;
+                    const filename = properties.filename; 
 
-        const uniqueNames = new Set();
-        const uniqueBusinesses = new Set();
-        const uniqueGCs = new Set();
+                    let popupContent = `
+                        <div id="popup" style="max-height: 300px; overflow-y: auto;">
+                            <span class="close-button" onclick="popup.remove()">×</span>
+                            <h3>${properties['Location Address']}</h3>
+                            ${Object.entries(properties)
+                                .filter(([key]) => key !== 'color' && key !== 'id' && key !== 'filename' && key !== 'monthsDifference' && key !== 'coordinates' && key !== 'longitude' && key !== 'latitude' && key !== 'filepath')
+                                .map(([key, value]) => `<p><strong>${key}:</strong> ${value}</p>`)
+                                .join('')}
+                            <button class="edit-button" onclick="editPoint(${properties.id}, event)">Edit</button>
+                            ${filename ? `<a href="/locations/${properties.id}/file" download="${filename}">Download File</a>` : ''}
+                        </div>
+                    `;
+                    popup.setLngLat(coordinates).setHTML(popupContent).addTo(map);
+                });
 
-        filteredLocations.forEach(location => {
-            if (location.properties['QEWI Name']) uniqueNames.add(location.properties['QEWI Name']);
-            if (location.properties['QEWI Business Name']) uniqueBusinesses.add(location.properties['QEWI Business Name']);
-            if (location.properties['GC Who requested estimate']) uniqueGCs.add(location.properties['GC Who requested estimate']);
-        });
+                map.on('mouseenter', 'places', () => {
+                    map.getCanvas().style.cursor = 'pointer';
+                });
 
-        if (fieldNumber === 1 && query1.length > 0) {
-            if (uniqueNames.size > 0) {
-                searchResults1.style.display = 'block';
-                uniqueNames.forEach(name => {
-                    const resultItem = document.createElement('div');
-                    resultItem.className = 'result-item';
-                    resultItem.textContent = name;
-                    resultItem.onclick = () => {
-                        document.getElementById('searchInput1').value = name;
-                        updateMarkers();
-                        searchResults1.style.display = 'none';
-                    };
-                    searchResults1.appendChild(resultItem);
+                map.on('mouseleave', 'places', () => {
+                    map.getCanvas().style.cursor = '';
                 });
             }
+            colorPointsByLastJobDate(data);
+            map.getSource('places').setData(data);
         }
 
-        if (fieldNumber === 2 && query2.length > 0) {
-            if (uniqueBusinesses.size > 0) {
-                searchResults2.style.display = 'block';
-                uniqueBusinesses.forEach(business => {
-                    const resultItem = document.createElement('div');
-                    resultItem.className = 'result-item';
-                    resultItem.textContent = business;
-                    resultItem.onclick = () => {
-                        document.getElementById('searchInput2').value = business;
-                        updateMarkers();
-                        searchResults2.style.display = 'none';
-                    };
-                    searchResults2.appendChild(resultItem);
-                });
+        function colorPointsByLastJobDate(data) {
+            data.features.forEach(feature => {
+                const lastJobDateStr = feature.properties['Last Job Date'];
+                if (lastJobDateStr) {
+                    const [mm, dd, yyyy] = lastJobDateStr.split('.').map(Number);
+                    const lastJobDate = new Date(yyyy, mm - 1, dd); 
+                    const monthsDifference = calculateMonthDifference(referenceDate, lastJobDate);
+                    feature.properties.monthsDifference = monthsDifference;
+                    assignColor(feature, monthsDifference);
+                } else {
+                    feature.properties.color = '#6c757d'; 
+                }
+            });
+        }
+
+        function calculateMonthDifference(date1, date2) {
+            let months = (date1.getFullYear() - date2.getFullYear()) * 12;
+            months -= date2.getMonth();
+            months += date1.getMonth();
+            return months <= 0 ? 0 : months;
+        }
+
+        function assignColor(feature, monthsDifference) {
+            if (monthsDifference >= 24) {
+                feature.properties.color = '#dc3545'; 
+            } else if (monthsDifference >= 12) {
+                feature.properties.color = '#fd7e14'; 
+            } else if (monthsDifference >= 6) {
+                feature.properties.color = '#ffc107'; 
+            } else if (monthsDifference >= 3) {
+                feature.properties.color = '#28a745'; 
+            } else {
+                feature.properties.color = '#198754'; 
             }
         }
 
-        if (fieldNumber === 3 && query3.length > 0) {
-            if (uniqueGCs.size > 0) {
-                searchResults3.style.display = 'block';
-                uniqueGCs.forEach(gc => {
-                    const resultItem = document.createElement('div');
-                    resultItem.className = 'result-item';
-                    resultItem.textContent = gc;
-                    resultItem.onclick = () => {
-                        document.getElementById('searchInput3').value = gc;
-                        updateMarkers();
-                        searchResults3.style.display = 'none';
-                    };
-                    searchResults3.appendChild(resultItem);
+
+        function updateMarkers() {
+            const customerName = document.getElementById('searchCustomer').value.toLowerCase();
+            const locationAddress = document.getElementById('searchLocation').value.toLowerCase();
+            const companyName = document.getElementById('searchCompany').value.toLowerCase();
+
+            const filteredLocations = allLocations.features.filter(location => {
+                const props = location.properties;
+                return (customerName === '' || props['Customer Name'].toLowerCase().includes(customerName)) &&
+                       (locationAddress === '' || props['Location Address'].toLowerCase().includes(locationAddress)) &&
+                       (companyName === '' || props['Company Name'].toLowerCase().includes(companyName));
+            });
+
+            updateMapData({
+                type: "FeatureCollection",
+                features: filteredLocations
+            });
+        }
+
+        function updateFilters() {
+            const filterOptions = [
+                { label: 'Less than 3 Months Ago', months: 3, id: 'filter3' },
+                { label: 'Less than 6 Months Ago', months: 6, id: 'filter6' },
+                { label: 'Less than 12 Months Ago', months: 12, id: 'filter12' },
+                { label: 'Less than 24 Months Ago', months: 24, id: 'filter24' },
+                { label: 'All', months: 0, id: 'showAll' } 
+            ];
+
+            const filterContainer = document.getElementById('filterContainer');
+            filterContainer.innerHTML = '';
+
+            filterOptions.forEach(option => {
+                const label = document.createElement('label');
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = 'dateRange';
+                radio.id = option.id;
+                radio.value = option.months;
+                radio.addEventListener('change', () => applyFilters());
+                label.appendChild(radio);
+                label.appendChild(document.createTextNode(option.label));
+                filterContainer.appendChild(label);
+            });
+        }
+
+        function applyFilters() {
+            const selectedFilter = document.querySelector('input[name="dateRange"]:checked');
+            const cutoffMonths = selectedFilter ? parseInt(selectedFilter.value) : 0; 
+
+            let filteredLocations = allLocations.features;
+
+            if (cutoffMonths > 0) {
+                filteredLocations = filteredLocations.filter(feature => {
+                    const monthsDifference = feature.properties.monthsDifference;
+                    return monthsDifference === undefined || monthsDifference < cutoffMonths;
                 });
             }
+
+            const customerName = document.getElementById('searchCustomer').value.toLowerCase();
+            const locationAddress = document.getElementById('searchLocation').value.toLowerCase();
+            const companyName = document.getElementById('searchCompany').value.toLowerCase();
+
+            filteredLocations = filteredLocations.filter(location => {
+                const props = location.properties;
+                return (customerName === '' || props['Customer Name'].toLowerCase().includes(customerName)) &&
+                       (locationAddress === '' || props['Location Address'].toLowerCase().includes(locationAddress)) &&
+                       (companyName === '' || props['Company Name'].toLowerCase().includes(companyName));
+            });
+
+            const filteredData = { type: "FeatureCollection", features: filteredLocations };
+            colorPointsByLastJobDate(filteredData); 
+            updateMapData(filteredData);
         }
 
-        updateMarkers();
-    }
-
-    document.getElementById('searchInput1').addEventListener('input', () => {
-        const query1 = document.getElementById('searchInput1').value.trim();
-        if (query1 === '') {
-            searchResults1.innerHTML = '';
-            searchResults1.style.display = 'none';
+        function editPoint(id, event) {
+            event.stopPropagation(); 
+            const location = allLocations.features.find(loc => loc.properties.id === id);
+            selectedCoordinates = location.geometry.coordinates; 
+            populateEditForm(location.properties);
+            popup.remove(); 
         }
-        updateMarkers();
-    });
 
-    document.getElementById('searchInput2').addEventListener('input', () => {
-        const query2 = document.getElementById('searchInput2').value.trim();
-        if (query2 === '') {
-            searchResults2.innerHTML = '';
-            searchResults2.style.display = 'none';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const mapInstance = initializeMap();
+            attachEventListeners();
+            updateFilters();
+        });
+
+
+        function attachEventListeners() {
+            const addPointButton = document.getElementById('addPointButton');
+            const editPointButton = document.getElementById('editPointButton');
+            const cancelButton = document.getElementById('cancelButton');
+            const cancelEditButton = document.getElementById('cancelEditButton');
+            const addPointFormDiv = document.getElementById('addPointForm');
+            const editForm = document.getElementById('editForm');
+
+            addPointButton.addEventListener('click', () => {
+                addingPoint = true;
+                document.getElementById('choosePointMessage').style.display = 'block';
+                document.getElementById('addPointButton').style.display = 'none';
+                document.getElementById('editPointButton').style.display = 'none';
+                document.getElementById('cancelButton').style.display = 'block';
+                document.getElementById('cancelEditButton').style.display = 'none';
+                map.on('click', addPointToMap);
+            });
+
+            cancelButton.addEventListener('click', () => {
+                addingPoint = false;
+                document.getElementById('choosePointMessage').style.display = 'none';
+                document.getElementById('addPointButton').style.display = 'block';
+                document.getElementById('editPointButton').style.display = 'block';
+                map.off('click', addPointToMap);
+                addPointFormDiv.style.display = 'none';
+                document.getElementById('cancelButton').style.display = 'none';
+                document.getElementById('cancelEditButton').style.display = 'none';
+            });
+
+            editPointButton.addEventListener('click', () => {
+                editingPoint = true;
+                document.getElementById('choosePointMessage').style.display = 'block';
+                document.getElementById('addPointButton').style.display = 'none';
+                document.getElementById('editPointButton').style.display = 'none';
+                document.getElementById('cancelEditButton').style.display = 'block'; 
+                document.getElementById('cancelButton').style.display = 'none'; 
+                map.on('click', editPointToMap);
+            });
+
+            cancelEditButton.addEventListener('click', () => {
+                editingPoint = false;
+                document.getElementById('choosePointMessage').style.display = 'none';
+                document.getElementById('addPointButton').style.display = 'block';
+                document.getElementById('editPointButton').style.display = 'block';
+                map.off('click', editPointToMap); 
+                selectedPointId = null;
+                editForm.innerHTML = '';
+                editForm.style.display = 'none';
+                document.getElementById('cancelEditButton').style.display = 'none';
+                document.getElementById('cancelButton').style.display = 'none';
+
+            });
         }
-        updateMarkers();
-    });
 
-    document.getElementById('searchInput3').addEventListener('input', () => {
-        const query3 = document.getElementById('searchInput3').value.trim();
-        if (query3 === '') {
-            searchResults3.innerHTML = '';
-            searchResults3.style.display = 'none';
+        function cancelEdit() {
+            document.getElementById('editForm').style.display = 'none';
+            selectedPointId = null;
         }
-        updateMarkers();
-    });
 
-    function closePopup() {
-        document.getElementById('popupContainer').style.display = 'none';
-    }
-</script>
-
+    </script>
 </body>
 </html>
